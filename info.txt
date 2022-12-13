@@ -1,0 +1,7 @@
+Set up venv:
+> python -m venv env
+
+Get packages:
+> python -m pip install  flask_sqlalchemy
+> python -m pip install  flask_migrate
+> python -m pip install mysql-connector-python
