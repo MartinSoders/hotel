@@ -643,6 +643,45 @@ def select_room(room_list, booking):
         raise  RuntimeError
 
 
+def get_rooms_for_people():
+    
+    try:
+        guest_number = int(input("Skriv in antal gäster :"))    
+    except:
+        input("Inte en giltig siffra (Enter för att återgå)")        
+        return None
+    
+    start_date = input_get_date()
+    stop_date = input_get_date()
+    
+    free_room_list = get_free_rooms(start_date, stop_date)
+    
+    rooms_for_guests = []
+    for room_x in free_room_list:
+        if room_x.room_type == "enkel":
+            max_guests = 1
+        if room_x.room_type == "dubbel":
+            max_guests = 2 + room_x.extra_beds
+        if guest_number <= max_guests:
+            rooms_for_guests.append(room_x)
+    
+    os.system("clear")
+    if rooms_for_guests == []:
+        print(f'Det fanns inga rum för {guest_number} mellan {start_date} och {stop_date}')
+        input("Tryck enter för att gå vidare")
+        return None
+    else:
+        print(f"Lediga rum för {guest_number} mellan {start_date} och {stop_date}")
+        for room_x in rooms_for_guests:
+            print(f"ID: {room_x.id}, Typ: {room_x.room_type}, Extra-sängar: {room_x.extra_beds}")
+        input("Tryck enter för att gå vidare")
+        return True
+            
+        
+            
+        
+    
+    
 
 ###############################################################################
 ''' ----------- Extrasängar och kontroll - ---------------------------------'''
@@ -725,7 +764,6 @@ def check_reciept():
     
     for this_reciept in qry:
         delta = datetime.now() - this_reciept.created_time
-        print(delta.days)
         if delta.days >= 11:
             this_booking = db.session.query(Booking).filter(Booking.id == this_reciept.booking_id).one()
             print(f"Mer än 10 dagar gammalt: Boknings ID: {this_reciept.booking_id} Betal status: {this_reciept.is_payed} Skapad: {this_reciept.created_time}, Rum: {this_booking.room_id}")
@@ -769,7 +807,7 @@ if __name__  == "__main__":
             print("4. Ändra bokning")
             print("5. Ta bort bokning")
             print("6. Radera bokningar som inte är betalada")
-            
+            print("7. Sök ledigt rum för X personer")
             
             print("\n----Helpers------")
             print("20. Visa alla rum")
@@ -806,7 +844,10 @@ if __name__  == "__main__":
                 status_value = delete_booking()     ### Radera bokning
             
             if sel == "6":
-                status_value = check_reciept()    ### Radera bokning
+                status_value = check_reciept()      ### Radera bokning
+                
+            if sel == "7":                          ### Sök rum för X personer      
+                status_values = get_rooms_for_people()
                 
             if sel == "20":                         ### Visa alla rum
                 os.system("clear")
