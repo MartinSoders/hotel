@@ -140,11 +140,7 @@ def make_booking():
         # Välj antal extrasängar (för dubbelrum)
         else:          
             b.room_id = room.id
-            if room.room_type == "dubbel":
-                b.extra_beds = pick_extra_beds()
-                
-            else:
-                b.extra_beds = 0
+            b.extra_beds = pick_extra_beds(room)
         
         # Loop klar
         os.system("clear")
@@ -340,10 +336,8 @@ def edit_booking():
         input("Start datum måste vara lägre än slut datum")
         return None
         
-    room_type = db.session.query(Room).filter_by(id=booking.room_id).one().room_type
-        
-    if room_type == "dubbel":
-        booking.extra_beds = pick_extra_beds()
+    room = db.session.query(Room).filter_by(id=booking.room_id).one()
+    booking.extra_beds = pick_extra_beds(room)
     
     
     booking.start_date = start_date
@@ -656,10 +650,13 @@ def select_room(room_list, booking):
 
     
 ''' Extrasängar '''     
-def pick_extra_beds():
+def pick_extra_beds(room_obj):
+    if room_obj.extra_beds == 0:
+        return 0
+    
     while True:
         os.system("clear")
-        sel_beds = input("Välj antal extrasängar (0-2): ")
+        sel_beds = input(f"Välj antal extrasängar (0- {room_obj.extra_beds}): ")
         try:
             sel_int = int(sel_beds)
             is_int = False
@@ -670,11 +667,11 @@ def pick_extra_beds():
             sel_int = None
         
         if isinstance(sel_int, int):
-            if sel_int >= 0 and sel_int <= 2:
+            if sel_int >= 0 and sel_int <= room_obj.extra_beds:
                 return sel_int
 
             else:
-                print(f"Välj en siffra mellan 0 och 2 inte {sel_int}")
+                print(f"Välj en siffra mellan 0 och {room_obj.extra_beds} inte {sel_int}")
                 input("---Tryck enter för att gå tillbaks") 
 
 
@@ -730,14 +727,13 @@ def check_reciept():
         delta = datetime.now() - this_reciept.created_time
         print(delta.days)
         if delta.days >= 11:
-            
-            print(f"Mer än 10 dagar gammalt: \nBoknings ID: {this_reciept.booking_id} \nBetal status: {this_reciept.is_payed} \nSkapad: {this_reciept.created_time}")
             this_booking = db.session.query(Booking).filter(Booking.id == this_reciept.booking_id).one()
-            print(f"\nDatum: {this_booking.start_date} - {this_booking.end_date}\nRum: {this_booking.room_id}")
-            #db.session.delete(this_reciept)
-            #db.session.commit()
-            #db.session.delete(this_booking)
-            #db.session.commit()
+            print(f"Mer än 10 dagar gammalt: Boknings ID: {this_reciept.booking_id} Betal status: {this_reciept.is_payed} Skapad: {this_reciept.created_time}, Rum: {this_booking.room_id}")
+            
+            db.session.delete(this_reciept)
+            db.session.commit()
+            db.session.delete(this_booking)
+            db.session.commit()
     input("Klart: Tryck enter för att återgå")
     return True
 
@@ -762,7 +758,6 @@ if __name__  == "__main__":
     
     with app.app_context():
         db.create_all()
-        add_rooms()
 
         
         while True:

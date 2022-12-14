@@ -32,14 +32,24 @@ INSERT INTO booking(room_id, guest_id, extra_beds, start_date, end_date) VALUES 
 INSERT INTO receipt VALUES (4, '2022-12-02 01:02:33', 600, False);
 
 ### Med kvitton som är okej
-INSERT INTO booking(room_id, guest_id, extra_beds, start_date, end_date) VALUES ("2A", 1, 1, Date('2022-12-24'), Date('2022-12-27'));
+INSERT INTO booking(room_id, guest_id, extra_beds, start_date, end_date) VALUES ("2A", 1, 1, Date('2022-12-20'), Date('2022-12-23'));
 INSERT INTO receipt VALUES (5, '2022-12-14 01:02:33', 600, False);
-INSERT INTO booking(room_id, guest_id, extra_beds, start_date, end_date) VALUES ("2B", 1, 1, Date('2022-12-24'), Date('2022-12-28'));
+INSERT INTO booking(room_id, guest_id, extra_beds, start_date, end_date) VALUES ("2A", 1, 1, Date('2022-12-24'), Date('2022-12-27'));
 INSERT INTO receipt VALUES (6, '2022-12-14 01:02:33', 600, False);
-INSERT INTO booking(room_id, guest_id, extra_beds, start_date, end_date) VALUES ("2C", 1, 1, Date('2022-12-24'), Date('2022-12-29'));
+INSERT INTO booking(room_id, guest_id, extra_beds, start_date, end_date) VALUES ("2B", 1, 1, Date('2022-12-24'), Date('2022-12-28'));
 INSERT INTO receipt VALUES (7, '2022-12-14 01:02:33', 600, False);
-INSERT INTO booking(room_id, guest_id, extra_beds, start_date, end_date) VALUES ("3A", 1, 2, Date('2022-12-24'), Date('2022-12-30'));
+INSERT INTO booking(room_id, guest_id, extra_beds, start_date, end_date) VALUES ("2C", 1, 1, Date('2022-12-24'), Date('2022-12-29'));
 INSERT INTO receipt VALUES (8, '2022-12-14 01:02:33', 600, False);
+INSERT INTO booking(room_id, guest_id, extra_beds, start_date, end_date) VALUES ("3A", 1, 2, Date('2022-12-24'), Date('2022-12-30'));
+INSERT INTO receipt VALUES (9, '2022-12-14 01:02:33', 600, False);
+
+
+
+
+
+
+
+
 
 
 
