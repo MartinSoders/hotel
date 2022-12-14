@@ -4,8 +4,8 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate, upgrade
 import os
 from sqlalchemy.sql import func
-from sqlalchemy import or_
-from datetime import date, datetime
+from sqlalchemy import or_, and_
+from datetime import date, datetime, timedelta
 
 
 app = Flask(__name__)
@@ -13,11 +13,12 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqlconnector://martinso:BANAN12
 db = SQLAlchemy(app)
 migrate = Migrate(app,db)
 
-''' Klasser -------------------------------------------------------------------------------------------------------------------------------------------------------------------        '''
+''' Klasser -------------------------------------------------------------------------------------------------------------------------------------------------------------------'''
 
 class Room(db.Model):
     id = db.Column(db.String(5), primary_key=True)
     room_type = db.Column(db.String(7), nullable = False)
+    extra_beds = db.Column(db.Integer, nullable = False)
     
 class Guest(db.Model):
     id = db.Column(db.Integer(), primary_key=True, autoincrement=True)
@@ -35,16 +36,17 @@ class Booking(db.Model):
     start_date = db.Column(db.Date, nullable = False)
     end_date = db.Column(db.Date, nullable = False)
     
-
-''' Funktioner -------------------------------------------------------------------------------------------------------------------------------------------------------------------        '''
-
 class Receipt(db.Model):
     booking_id = db.Column(db.Integer(), db.ForeignKey('booking.id'), nullable = False, primary_key = True)
     ''' När bokningen gjordes '''
     created_time = db.Column(db.DateTime, nullable = False)
     amount = db.Column(db.Float())
     is_payed = db.Column(db.Boolean(), nullable = False)
-    
+   
+   
+''' Funktioner -------------------------------------------------------------------------------------------------------------------------------------------------------------------'''
+ 
+''' Dummy funktion som lägger till rum från rooms.txt '''
 ## Lägg till rum från (data/rooms.txt) (för bärbara datorn)
 def add_rooms():
     
@@ -52,7 +54,10 @@ def add_rooms():
         read_lines = file.readlines()
         for line in read_lines:
             room_id = line[:line.find(";")]
-            room_type = line[line.find(";")+1:-1]
+            chop_string = line[line.find(";")+1:]
+            room_type = chop_string[:chop_string.find(";")]
+            extra_beds = int(chop_string[chop_string.find(";")+1:-1])
+
             if room_type not in ['enkel','dubbel']:
                 print("Något är fel i rumsfilen")
                 print(room_type)
@@ -61,11 +66,350 @@ def add_rooms():
                     r = Room()
                     r.id = room_id
                     r.room_type = room_type
+                    r.extra_beds = extra_beds
                     db.session.add(r)
                     db.session.commit()
  
+
+
+
+
+
+
+
+
+
+
+        
+    
+    
+        
+    
+    
+    
+    
+###############################################################################
+''' ----------- (Main funks) -------.---------------------------------------'''
+###############################################################################
  
-''' ----------- GÄST: Välja / Skapa / Söka '''
+''' Skapa en bokning '''
+def make_booking():
+    
+    os.system("clear")
+    b = Booking()
+    
+    ''' Guest ID '''
+    guest_id = get_guest_id()
+     
+    if not guest_id:                    ### Guest_ID = None ---> Bokning avbruten
+            os.system("clear")
+            input("Bokning avbruten. Tryck enter för att gå vidare")
+            del b
+            return None
+    
+    b.guest_id = guest_id
+    ''' Datum '''  
+    while True:
+        ## Ange start och slutdatum
+        s_date, e_date = get_start_end_date()
+        free_rooms = get_free_rooms(s_date, e_date)
+        if len(free_rooms) == 0:
+            print("Det finns inga lediga rum mellan datumen")
+            sel_here = input("Ange ett annat datum. Eller skriv avslut för att avsluta")
+            if sel_here.lower() == "avslut":
+                os.system("clear")
+                input("Bokning avbruten. Tryck enter för att återgå")
+                del b
+                return None
+            
+        else:
+            b.start_date = s_date
+            b.end_date = e_date
+            break
+    
+    ''' Rum och extrasängar '''
+    while True:
+        
+        # Välj ett ledigt rum
+        room = select_room(free_rooms, b)
+        
+        if not room:   ### Ska bara vara None om man valt avslut
+            del b
+            return None
+        
+        # Välj antal extrasängar (för dubbelrum)
+        else:          
+            b.room_id = room.id
+            if room.room_type == "dubbel":
+                b.extra_beds = pick_extra_beds()
+                
+            else:
+                b.extra_beds = 0
+        
+        # Loop klar
+        os.system("clear")
+        break   
+    
+    
+    
+    print("Din bokning: \n")
+    print(f"Rum ID: {b.room_id}\nGäst ID: {b.guest_id}\nStart Datum: {b.start_date}\nSlut Datum: {b.end_date}\nExtra Sängar:{b.extra_beds}\n")
+    sel_here = input("Tryck enter för att godkänna. Skriv avslut för att avbryta")
+    
+    
+    ''' Lägg till bokning i databas (med kontroll så alla fält har värden)'''
+    
+    if sel_here.lower() == "avslut":  ## Om avslut (lägger ej till)
+        return None
+      
+    else:                              ## Lägger till i databas
+        booking_test = booking_has_values(b)
+        if booking_test:    # Om alla fält har värden, commit till databas
+            db.session.add(b)
+            db.session.commit()
+          
+        else:    # Felmeddelande om någon kolumn saknar värden. (Ska inte häda)
+            del b  
+            return None
+    
+        
+    ''' Skapa ett kvitto '''
+    r = make_reciept(b)
+    db.session.add(r)
+    db.session.commit()
+    
+    
+    
+    os.system("clear")
+    print("----- Ditt kvitto-------")
+    print(f"Kvitto ID: {r.booking_id}\nBetalad: {r.is_payed},\nBelopp:{r.amount},\nSkapad datum:{r.created_time}\n")
+    input("Tryck enter för att fortsätta")
+    
+    return True
+
+''' Ändra en gäst ''' 
+def edit_guest():
+    
+    ## Kolla att nummret är godkänt
+    phone_bool = False
+    while True:
+        
+        phone_string = input('Ange telefon-nummer:')
+        if is_phone(phone_string):
+            break
+        
+        else:
+            input("Ange godkänt telefonnummer (enter för att fortsätta)")
+            os.system("clear")
+        
+                
+    
+    ## Sök efter telefonnummer 
+    get_qry = db.session.query(Guest).filter_by(phone=phone_string).all()
+    
+    
+    if get_qry != []:
+        qry = get_qry[0]
+        print(f"Nuvarande namn: {qry.first_name} {qry.last_name}")
+        qry.first_name = input(f"Skriv nytt förnamn: ")
+        qry.last_name = input(f"Skriv nytt efternamn: ")
+        db.session.commit()
+        
+        
+    
+    else:
+        input("Finns ingen gäst med detta telefon-nummer. Enter för att återgå")
+        return None
+      
+
+def delete_guest():
+    
+    ## Kolla att nummret är godkänt
+    phone_bool = False
+    while True:
+        
+        phone_string = input('Ange telefon-nummer:')
+        if is_phone(phone_string):
+            break
+        
+        else:
+            input("Ange godkänt telefonnummer (enter för att fortsätta)")
+            os.system("clear")
+        
+                
+    
+    
+    ## Sök efter telefonnummer 
+    get_qry = db.session.query(Guest).filter_by(phone=phone_string).all()
+
+    if get_qry != []:
+        qry = get_qry[0]
+        if guest_has_bookings(qry):
+            print("Kunden har framtida bokningar, kan inte tas bort!")
+            input("----Tryck enter för att återgå ---------------")
+            
+        else:
+            while True:
+                print("Kunden har inga framtida bokningar och kan tas bort!")
+                print(f"Vill du ta bort: {qry.first_name} {qry.last_name} \nMed Telefon: {qry.phone}")
+                del_sel = input("Y/N: ")
+                if del_sel.lower() == "y":
+                    db.session.delete(qry)
+                    db.session.commit()
+                    return True
+                elif del_sel.lower() == "n":
+                    return None
+
+                else:
+                    print("------FEL INPUT------------------\nVälj Y/N \n")
+                
+    else:
+        input("Finns ingen kund med det nummret (enter för att återgå)")    
+        return None
+    
+def edit_booking():
+    os.system('clear')
+    phone_str = input("Skriv gästens telefon-nummer")
+    
+    ## Kolla om gäst finns
+    get_qry = db.session.query(Guest).filter_by(phone=phone_str).all()    
+    if get_qry == []:
+        input("Finns ingen gäst med det telefonnummer (enter för att återgå)")
+        return None
+    else:
+        guest_id = get_qry[0].id
+
+    ## Visa bokningar
+    get_qry = db.session.query(Booking).filter_by(guest_id=guest_id).all()   
+    
+    if get_qry == []:
+        input("Gäst har inga bokningar telefonnummer (enter för att återgå)")
+        return None
+    
+    else:
+        print("---Bokningar för gäst")
+        booking_dict = {}
+        for q in get_qry:
+            booking_dict[str(q.id)] = q
+            print(f"Boknings-id: {q.id}, Rum: {q.room_id}, Datum: {q.start_date} - {q.end_date}")
+        
+        book_id = input("Välj boknings-id: ")
+        if book_id in booking_dict.keys():
+            booking = booking_dict[book_id]
+        else:
+            input("Finns ingen bokning med det ID:t (enter för att återgå)")
+            return None
+        
+    get_qry = db.session.query(Booking).filter_by(room_id=booking.room_id).all()   
+    min_date = datetime.now().date() + timedelta(days=1)
+    max_date = booking.end_date + timedelta(days=30)
+
+    for room_booking in get_qry:
+        
+        ### Om slutdatum    
+        if room_booking.id != booking.id:
+            
+            ## Om start ligger mellan min-max 
+            if room_booking.start_date <= max_date and room_booking.end_date >= min_date:
+            
+            
+                ## Om bokningen ligger före 
+                if room_booking.start_date <= booking.start_date:
+                    min_date = room_booking.end_date
+                
+                ## Om bokningen ligger efter:
+                if room_booking.start_date >= booking.end_date:
+                    max_date = room_booking.start_date
+
+    
+    print("--------------------------------------------------------")
+    print(f"Ange nytt startdatum, rummet är ledig från: {min_date}")
+    start_date = input_get_date()
+    if start_date < min_date:
+        input("För tidigt datum, var god försök igen (enter)")
+        return None
+    
+    print("--------------------------------------------------------")   
+    print(f"Ange nytt slutdatum, rummet är ledig tills: {max_date}")
+    stop_date = input_get_date()
+    if stop_date > max_date:
+        input("För högt datum, var god försök igen (enter)")
+        return None
+        
+    if start_date > stop_date:
+        input("Start datum måste vara lägre än slut datum")
+        return None
+        
+    room_type = db.session.query(Room).filter_by(id=booking.room_id).one().room_type
+        
+    if room_type == "dubbel":
+        booking.extra_beds = pick_extra_beds()
+    
+    
+    booking.start_date = start_date
+    booking.end_date = stop_date
+    db.session.commit()
+    os.system("clear")
+    print("Updaterat!")
+    print(f"Rum ID: {booking.room_id}")
+    print(f"Datum: {booking.start_date} - {booking.end_date}")
+    print(f"Extra-sängar: {booking.extra_beds}")
+    input("Tryck enter för att återgå")
+    return True
+
+
+
+def delete_booking():
+    os.system('clear')
+    phone_str = input("Skriv gästens telefon-nummer")
+    
+    ## Kolla om gäst finns
+    get_qry = db.session.query(Guest).filter_by(phone=phone_str).all()    
+    if get_qry == []:
+        input("Finns ingen gäst med det telefonnummer (enter för att återgå)")
+        return None
+    else:
+        guest_id = get_qry[0].id
+
+    ## Visa bokningar
+    get_qry = db.session.query(Booking).filter_by(guest_id=guest_id).all()   
+    
+    if get_qry == []:
+        input("Gäst har inga bokningar telefonnummer (enter för att återgå)")
+        return None
+    
+    else:
+        print("---Bokningar för gäst")
+        booking_dict = {}
+        for q in get_qry:
+            booking_dict[str(q.id)] = q
+            print(f"Boknings-id: {q.id}, Rum: {q.room_id}, Datum: {q.start_date} - {q.start_date}")
+        
+        book_id = input("Välj boknings-id: ")
+        if book_id in booking_dict.keys():
+            booking = booking_dict[book_id]
+        else:
+            input("Finns ingen bokning med det ID:t (enter för att återgå)")
+            return None
+    
+    print(f"Vill du ta bort bokningen mellan {booking.start_date} - {booking.end_date}??")
+    while True:
+        delete_sel = input("[Y/N]: ")
+        if delete_sel.lower() == "y":
+            reciept = db.session.query(Receipt).filter_by(booking_id=booking.id).one()
+            db.session.delete(reciept)
+            db.session.commit()
+            db.session.delete(booking)
+            db.session.commit()
+            return True
+        elif delete_sel.lower() == "n":
+            return None
+        
+ 
+###############################################################################
+''' ----------- GÄST: Välja / Skapa / Söka ---------------------------------'''
+###############################################################################
+
                    
 ## Lägg till en gäst
 def add_guest():
@@ -84,9 +428,10 @@ def add_guest():
         phone_string = input("Telefon (0760-123456): ")
     
     query_phone = Guest.query.filter(Guest.phone.contains(phone_string)).order_by(Guest.id).all()
-    if len(query_phone) > 0:
+    if len(query_phone) == 1:
         print(f"Användare finns redan för telefonnummer: {phone_string}")
         print(f"Namn: {query_phone[0].first_name} {query_phone[0].last_name}, Telefon: {query_phone[0].phone}")
+        input("---------------------------------")
         return query_phone[0].phone
         
     
@@ -189,8 +534,20 @@ def get_guest_id():
     return guest_id
  
  
- 
-''' ---------  Välja rum och datum ----- '''
+### Om kund har bokningar
+def guest_has_bookings(guest_object):
+    ## Sök efter telefonnummer 
+    qry = db.session.query(Booking).filter_by(guest_id=guest_object.id).all()
+    for booking in qry:
+        if booking.start_date >= datetime.now().date():
+            return True
+    return False
+        
+    
+    
+###############################################################################
+''' ----------- RUM OCH DATUM ------------ ---------------------------------'''
+###############################################################################
 
 ## Tar input och skapar ett datum: ---> date(YYYY,MM,DD)
 def input_get_date():
@@ -238,9 +595,9 @@ def get_start_end_date():
 ## Hitta alla bokade rum              
 def get_booked_rooms(start_date: date, end_date: date):
     if isinstance(start_date, date) and isinstance(end_date, date):
-        qry = db.session.query(Booking).filter(or_(Booking.start_date >= start_date, Booking.end_date <= end_date))
+        qry = db.session.query(Booking).filter(and_(Booking.end_date >= start_date, Booking.start_date <= end_date))
         booked_rooms = list(set([q.room_id for q in qry.all()]))
-        return booked_rooms
+    return booked_rooms
         
 ## Hitta alla lediga rum    
 def get_free_rooms(start_date, end_date):
@@ -290,6 +647,13 @@ def select_room(room_list, booking):
         print("Något gick helt fel")
         input("---- Tryck enter för att avsluta")
         raise  RuntimeError
+
+
+
+###############################################################################
+''' ----------- Extrasängar och kontroll - ---------------------------------'''
+###############################################################################
+
     
 ''' Extrasängar '''     
 def pick_extra_beds():
@@ -313,6 +677,7 @@ def pick_extra_beds():
                 print(f"Välj en siffra mellan 0 och 2 inte {sel_int}")
                 input("---Tryck enter för att gå tillbaks") 
 
+
 ''' Kontrollera att alla fält har värden'''            
 ## Check that all fields have values! 
 def booking_has_values(bk):
@@ -327,8 +692,12 @@ def booking_has_values(bk):
 
 
 
-''' Skapa ett kvitto '''
-## Räknar ut ett dummy-pris
+###############################################################################
+''' ----------- Kvitto ------------------- ---------------------------------'''
+###############################################################################
+
+
+''' Beräkna (dummy) pris '''
 def set_dummy_price(bk):
     
     room = db.session.query(Room).filter(Room.id == bk.room_id).first()
@@ -342,8 +711,7 @@ def set_dummy_price(bk):
     
     return delta * day_price
      
-        
-## Skapar kvitto        
+''' Skapa ett kvitto '''       
 def make_reciept(bk):
     re = Receipt()
     re.booking_id = bk.id
@@ -351,105 +719,33 @@ def make_reciept(bk):
     re.amount = set_dummy_price(bk)
     re.is_payed = False
     return re
-
-    
-        
-    
-    
-
-## Skapa en bokning
-def make_booking():
-    
-    os.system("clear")
-    b = Booking()
-    
-    ''' Guest ID '''
-    guest_id = get_guest_id()
-     
-    if not guest_id:                    ### Guest_ID = None ---> Bokning avbruten
-            os.system("clear")
-            input("Bokning avbruten. Tryck enter för att gå vidare")
-            del b
-            return None
-    
-    b.guest_id = guest_id
-    ''' Datum '''  
-    while True:
-        ## Ange start och slutdatum
-        s_date, e_date = get_start_end_date()
-        free_rooms = get_free_rooms(s_date, e_date)
-        if len(free_rooms) == 0:
-            print("Det finns inga lediga rum mellan datumen")
-            sel_here = input("Ange ett annat datum. Eller skriv avslut för att avsluta")
-            if sel_here.lower() == "avslut":
-                os.system("clear")
-                input("Bokning avbruten. Tryck enter för att återgå")
-                del b
-                return None
-            
-        else:
-            b.start_date = s_date
-            b.end_date = e_date
-            break
-    
-    ''' Rum och extrasängar '''
-    while True:
-        
-        # Välj ett ledigt rum
-        room = select_room(free_rooms, b)
-        
-        if not room:   ### Ska bara vara None om man valt avslut
-            del b
-            return None
-        
-        # Välj antal extrasängar (för dubbelrum)
-        else:          
-            b.room_id = room.id
-            if room.room_type == "dubbel":
-                b.extra_beds = pick_extra_beds()
-                
-            else:
-                b.extra_beds = 0
-        
-        # Loop klar
-        os.system("clear")
-        break   
-    
-    
-    
-    print("Din bokning: \n")
-    print(f"Rum ID: {b.room_id}\nGäst ID: {b.guest_id}\nStart Datum: {b.start_date}\nSlut Datum: {b.end_date}\nExtra Sängar:{b.extra_beds}\n")
-    sel_here = input("Tryck enter för att godkänna. Skriv avslut för att avbryta")
-    
-    
-    ''' Lägg till bokning i databas (med kontroll så alla fält har värden)'''
-    
-    if sel_here.lower() == "avslut":  ## Om avslut (lägger ej till)
-        return None
       
-    else:                              ## Lägger till i databas
-        booking_test = booking_has_values(b)
-        if booking_test:    # Om alla fält har värden, commit till databas
-            db.session.add(b)
-            db.session.commit()
-          
-        else:    # Felmeddelande om någon kolumn saknar värden. (Ska inte häda)
-            del b  
-            return None
-    
-        
-    ''' Skapa ett kvitto '''
-    r = make_reciept(b)
-    db.session.add(r)
-    db.session.commit()
-    
-    
-    
 
-    print("----- Ditt kvitto-------")
-    print(f"Kvitto ID: {r.booking_id}\nBetalad: {r.is_payed},\nBelopp:{r.amount},\nSkapad datum:{r.created_time}\n")
-    input("Tryck enter för att fortsätta")
+def check_reciept():
+    qry = db.session.query(Receipt).filter(Receipt.is_payed == False).all()
     
+    deletes = []
+    
+    for this_reciept in qry:
+        delta = datetime.now() - this_reciept.created_time
+        print(delta.days)
+        if delta.days >= 11:
+            
+            print(f"Mer än 10 dagar gammalt: \nBoknings ID: {this_reciept.booking_id} \nBetal status: {this_reciept.is_payed} \nSkapad: {this_reciept.created_time}")
+            this_booking = db.session.query(Booking).filter(Booking.id == this_reciept.booking_id).one()
+            print(f"\nDatum: {this_booking.start_date} - {this_booking.end_date}\nRum: {this_booking.room_id}")
+            #db.session.delete(this_reciept)
+            #db.session.commit()
+            #db.session.delete(this_booking)
+            #db.session.commit()
+    input("Klart: Tryck enter för att återgå")
+    return True
+
+        
+        
+        
+        
+        
     
 
 
@@ -472,15 +768,20 @@ if __name__  == "__main__":
         while True:
             print("Vad vill du göra?")
             print("0. Avsluta")
-            print("1. Lägg till en ny gäst")
-            print("2. Skapa en bokning")
-
-
-            print("----Helpers------")
+            print("1. Skapa en bokning")   
+            print("2. Ändra en kund")         
+            print("3. Ta bort en kund")
+            print("4. Ändra bokning")
+            print("5. Ta bort bokning")
+            print("6. Radera bokningar som inte är betalada")
+            
+            
+            print("\n----Helpers------")
             print("20. Visa alla rum")
             print("21. Visa alla gäster")
+            print("22. Lägg till en ny gäst")
+            print("23. Visa alla bokningar")
             
-        
             sel = input("Skriv val: ")
             
 
@@ -489,12 +790,29 @@ if __name__  == "__main__":
             if sel == "0":                          ### Avslut
                 break
 
-            if sel == "1":                          ### Lägg till en gäst
-                add_guest()
+
+                
             
-            if sel == "2":                          ### Skapa en bokning
-                make_booking()
-                           
+            if sel == "1":                          ### Skapa en bokning
+                status_value = make_booking()
+                
+                
+            if sel == "2":                          ### Ändra gäst
+                status_value = edit_guest()
+                     
+                     
+            if sel == "3":                          ### Ta bort gäst
+                status_value = delete_guest()           
+            
+            if sel == "4":                          ### Ändra en bokning
+                status_value = edit_booking()
+            
+            if sel == "5":
+                status_value = delete_booking()     ### Radera bokning
+            
+            if sel == "6":
+                status_value = check_reciept()    ### Radera bokning
+                
             if sel == "20":                         ### Visa alla rum
                 os.system("clear")
                 print("------ALLA RUM--------")
@@ -514,10 +832,18 @@ if __name__  == "__main__":
                 print("--------------------")
                 input("Tryck enter för att återgå")
 
+            if sel == "22":                          ### Lägg till en gäst
+                status_value = add_guest()
 
 
-
-
+            if sel == "23":                         ### Visa alla gäster
+                os.system("clear")
+                print("------ALLA GÄSTER--------")
+                
+                for b in Booking.query.order_by(Booking.room_id, Booking.start_date).all():
+                   print(b.room_id, b.start_date, b.end_date)
+                print("--------------------")
+                input("Tryck enter för att återgå")
 
 
 

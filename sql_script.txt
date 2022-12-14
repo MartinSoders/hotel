@@ -1,0 +1,52 @@
+
+DROP DATABASE IF EXISTS hotel;
+CREATE DATABASE hotel;
+USE hotel;
+
+
+## Skapar tabeller
+CREATE TABLE room(id VarChar(5) PRIMARY KEY, room_type VarChar(7) NOT NULL, extra_beds INT NOT NULL);
+CREATE TABLE guest(id INT PRIMARY KEY AUTO_INCREMENT, first_name VARCHAR(30) NOT NULL, last_name VARCHAR(30) NOT NULL, phone VARCHAR(30) NOT NULL UNIQUE); 
+CREATE TABLE booking(id INT PRIMARY KEY AUTO_INCREMENT, room_id VarChar(5) NOT NULL, guest_id INT NOT NULL, extra_beds INT NOT NULL, start_date Date NOT NULL,
+			end_date Date NOT NULL, FOREIGN KEY (room_id) REFERENCES room(id), FOREIGN KEY (guest_id) REFERENCES guest(id));
+CREATE TABLE receipt(booking_id INT PRIMARY KEY, created_time Datetime, amount Float, is_payed Bool, FOREIGN KEY (booking_id) REFERENCES booking(id));
+
+
+
+		
+INSERT INTO room VALUES ("1A", "enkel", 0), ("1B", "enkel", 0), ("1C", "enkel", 0), ("1D", "enkel", 0), ("2A", "dubbel", 1), ("2B", "dubbel", 1), ("2C", "dubbel", 1), ("2D", "dubbel", 1), ("3A", "dubbel", 2);
+
+
+INSERT INTO guest(first_name, last_name, phone) VALUES ("Martin", "Söderström", "0760-592852"), ("Benny", "Olsson", "1234-567890"), ("Leonell", "Messi", "1111-111111");
+
+
+
+### Med för gamla kvitton (en är betald)
+INSERT INTO booking(room_id, guest_id, extra_beds, start_date, end_date) VALUES ("1A", 1, 0, Date('2022-12-20'), Date('2022-12-30'));
+INSERT INTO receipt VALUES (1, '2022-10-01 01:02:33', 600, True);
+INSERT INTO booking(room_id, guest_id, extra_beds, start_date, end_date) VALUES ("1B", 1, 0, Date('2022-12-24'), Date('2022-12-25'));
+INSERT INTO receipt VALUES (2, '2022-11-01 01:02:33', 600, False);
+INSERT INTO booking(room_id, guest_id, extra_beds, start_date, end_date) VALUES ("1C", 1, 0, Date('2022-12-24'), Date('2022-12-25'));
+INSERT INTO receipt VALUES (3, '2022-12-01 01:02:33', 600, False);
+INSERT INTO booking(room_id, guest_id, extra_beds, start_date, end_date) VALUES ("1D", 1, 0, Date('2022-12-24'), Date('2022-12-26'));
+INSERT INTO receipt VALUES (4, '2022-12-02 01:02:33', 600, False);
+
+### Med kvitton som är okej
+INSERT INTO booking(room_id, guest_id, extra_beds, start_date, end_date) VALUES ("2A", 1, 1, Date('2022-12-24'), Date('2022-12-27'));
+INSERT INTO receipt VALUES (5, '2022-12-14 01:02:33', 600, False);
+INSERT INTO booking(room_id, guest_id, extra_beds, start_date, end_date) VALUES ("2B", 1, 1, Date('2022-12-24'), Date('2022-12-28'));
+INSERT INTO receipt VALUES (6, '2022-12-14 01:02:33', 600, False);
+INSERT INTO booking(room_id, guest_id, extra_beds, start_date, end_date) VALUES ("2C", 1, 1, Date('2022-12-24'), Date('2022-12-29'));
+INSERT INTO receipt VALUES (7, '2022-12-14 01:02:33', 600, False);
+INSERT INTO booking(room_id, guest_id, extra_beds, start_date, end_date) VALUES ("3A", 1, 2, Date('2022-12-24'), Date('2022-12-30'));
+INSERT INTO receipt VALUES (8, '2022-12-14 01:02:33', 600, False);
+
+
+
+
+
+
+
+
+
+
